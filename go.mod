@@ -37,3 +37,5 @@ require (
 	google.golang.org/grpc v1.32.0
 	google.golang.org/protobuf v1.23.0
 )
+
+replace github.com/decred/dcrwallet/ticketbuyer/v4 => ./ticketbuyer
