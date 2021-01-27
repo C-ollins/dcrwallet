@@ -184,6 +184,7 @@ func (tb *TB) Run(ctx context.Context, passphrase []byte) error {
 			}
 
 			for i := 0; i < buy; i++ {
+				log.Infof("Buying ticket #%d", i+1)
 				go func() {
 					err := tb.buy(cancelCtx, passphrase, tipHeader, expiry)
 					if err != nil {
@@ -218,21 +219,26 @@ func (tb *TB) Run(ctx context.Context, passphrase []byte) error {
 func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader, expiry int32) error {
 	ctx, task := trace.NewTask(ctx, "ticketbuyer.buy")
 	defer task.End()
+	log.Info("Buying ticket")
 
 	tb.mu.Lock()
 	buyTickets := tb.cfg.BuyTickets
 	tb.mu.Unlock()
+	log.Info("Buying buyTickets:", buyTickets)
 	if !buyTickets {
 		return nil
 	}
 
 	w := tb.wallet
 
+	log.Info("Debug 0")
 	// Unable to publish any transactions if the network backend is unset.
 	n, err := w.NetworkBackend()
 	if err != nil {
 		return err
 	}
+
+	log.Info("Debug 1")
 
 	// Ensure wallet is unlocked with the current passphrase.  If the passphase
 	// is changed, the Run exits and TB must be restarted with the new
@@ -241,7 +247,7 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 	if err != nil {
 		return err
 	}
-
+	log.Info("Debug 2")
 	// Read config
 	tb.mu.Lock()
 	account := tb.cfg.Account
@@ -258,28 +264,31 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 	splitAccount := tb.cfg.TicketSplitAccount
 	changeAccount := tb.cfg.ChangeAccount
 	tb.mu.Unlock()
-
+	log.Info("Debug 3")
 	// Determine how many tickets to buy
 	bal, err := w.AccountBalance(ctx, account, minconf)
 	if err != nil {
 		return err
 	}
 	spendable := bal.Spendable
-
+	log.Info("Debug 4")
 	if spendable < maintain {
-		log.Debugf("Skipping purchase: low available balance")
+		log.Info("Skipping purchase: low available balance")
 		return nil
 	}
+	log.Info("Debug 5")
 	spendable -= maintain
 	sdiff, err := w.NextStakeDifficultyAfterHeader(ctx, tip)
 	if err != nil {
 		return err
 	}
+	log.Info("Debug 6")
 	buy := int(spendable / sdiff)
 	if buy == 0 {
 		log.Debugf("Skipping purchase: low available balance")
 		return nil
 	}
+	log.Info("Debug 7")
 	max := int(w.ChainParams().MaxFreshStakePerBlock)
 	if buy > max {
 		buy = max
@@ -289,6 +298,7 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 	} else if limit > 0 && buy > limit {
 		buy = limit
 	}
+	log.Info("Debug 8 buying:", buy)
 	purchaseTicketReq := &wallet.PurchaseTicketsRequest{
 		Count:         buy,
 		SourceAccount: account,
@@ -311,10 +321,13 @@ func (tb *TB) buy(ctx context.Context, passphrase []byte, tip *wire.BlockHeader,
 	}
 	// If VSP is configured, we need to set the methods for vsp fee processment.
 	if tb.cfg.VSP != nil {
+		log.Info("Debug 8.1")
 		purchaseTicketReq.VSPFeePaymentProcess = tb.cfg.VSP.Process
 		purchaseTicketReq.VSPFeeProcess = tb.cfg.VSP.FeePercentage
 	}
+	log.Info("Debug 9")
 	tix, err := w.PurchaseTickets(ctx, n, purchaseTicketReq)
+	log.Info("Debug 10")
 	if tix != nil {
 		for _, hash := range tix.TicketHashes {
 			log.Infof("Purchased ticket %v at stake difficulty %v", hash, sdiff)
